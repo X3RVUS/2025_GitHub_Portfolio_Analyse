@@ -1,30 +1,56 @@
-# 2025_Github_Screener.rb
+# frozen_string_literal: true
 
 require 'octokit'
 require 'base64'
 require 'set'
+require 'yaml' # Hinzugefügt für die Konfigurationsdatei
 
 # ===================================================================
-# CONFIGURATION
+# CONFIGURATION MANAGEMENT
 # ===================================================================
 
-# IMPORTANT: Replace 'YOUR_TOKEN' with your Personal Access Token.
-ACCESS_TOKEN = ENV['GITHUB_TOKEN'] || 'YOUR_TOKEN'
+CONFIG_FILE = 'config.yml'
 
-# The GitHub username to be analyzed.
-GITHUB_USER = 'USER_NAME'
+# Lädt die Konfiguration aus der YAML-Datei.
+# Wenn die Datei nicht existiert oder unvollständig ist, wird eine interaktive Einrichtung gestartet.
+def load_or_create_config
+  config = if File.exist?(CONFIG_FILE)
+             YAML.load_file(CONFIG_FILE) || {}
+           else
+             {}
+           end
 
-# Stop words to ignore in the keyword search to get more relevant results.
+  if config['GITHUB_USER'].nil? || config['GITHUB_USER'] == 'USER_NAME' || config['ACCESS_TOKEN'].nil? || config['ACCESS_TOKEN'] == 'YOUR_TOKEN'
+    puts "Konfiguration nicht gefunden oder unvollständig. Bitte jetzt einrichten."
+    
+    print "Gib deinen GitHub-Benutzernamen ein: "
+    config['GITHUB_USER'] = gets.chomp
+    
+    print "Gib dein GitHub Personal Access Token ein: "
+    config['ACCESS_TOKEN'] = gets.chomp
+
+    File.write(CONFIG_FILE, config.to_yaml)
+    puts "✅ Konfiguration wurde in '#{CONFIG_FILE}' gespeichert.\n"
+  end
+  
+  config
+end
+
+# Lade die Konfiguration
+config = load_or_create_config
+
+# Weise die Konfigurationswerte den Konstanten zu.
+# Das Umgebungstoken hat weiterhin Vorrang.
+ACCESS_TOKEN = ENV['GITHUB_TOKEN'] || config['ACCESS_TOKEN']
+GITHUB_USER = config['GITHUB_USER']
+
+# Stop-Wörter bleiben unverändert
 STOP_WORDS = Set.new(%w(
   https http href com github bash www org de a about an and are as at be by for from how i in is it of on or that the this to was what when where who will with the to and of a in is it for on that as with he she they we me you my your our I be have do not have was were if then else for while do code file files gem build setup config run installation usage license mit gpl data lib docs new get use using via from this that these those an example examples please feel free to more also just like some any all its can not will readme md out there because been through into only repo repository project projects app application service api client server test tests feature features version update release change fix add remove refactor style docs chore ci build performance security support help contact information details note important))
 
 # ===================================================================
-
-# Check if a token has been set
-if ACCESS_TOKEN == 'YOUR_TOKEN'
-  puts "Error: Please set your GitHub Personal Access Token in the `ACCESS_TOKEN` line."
-  exit
-end
+# SCRIPT LOGIC (unverändert)
+# ===================================================================
 
 puts "Initializing screener for user: #{GITHUB_USER}..."
 
@@ -36,6 +62,9 @@ begin
   user = client.user(GITHUB_USER)
 rescue Octokit::NotFound
   puts "Error: User '#{GITHUB_USER}' not found."
+  exit
+rescue Octokit::Unauthorized
+  puts "Error: GitHub Token ist ungültig oder hat nicht die nötigen Rechte."
   exit
 end
 
@@ -161,7 +190,7 @@ if total_bytes > 0
   sorted_langs = language_stats.sort_by { |_, bytes| -bytes }
   sorted_langs.each do |lang, bytes|
     percentage = (bytes.to_f / total_bytes * 100).round(2)
-    puts "  - #{lang}: #{percentage}%" if percentage > 0.1
+    puts "   - #{lang}: #{percentage}%" if percentage > 0.1
   end
 else
   puts "No language data found."
@@ -169,6 +198,6 @@ end
 
 # Repository List
 puts "\n📚 Repository List (#{repo_names.size} total)"
-repo_names.each { |name| puts "  - #{name}" }
+repo_names.each { |name| puts "   - #{name}" }
 
 puts "=============================================="
